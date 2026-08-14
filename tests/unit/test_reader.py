@@ -278,3 +278,29 @@ async def test_parse_packet_payload_txt_type_decodes_high_bits():
     assert log_data["attempt"] == 1, (
         f"Expected attempt=1, got {log_data['attempt']}"
     )
+
+@pytest.mark.asyncio
+async def test_resp_code_beebo_ota_begin():
+    """beebo fork: RESP_CODE_BEEBO (223) sub-id 1 (OTA_BEGIN) decodes to
+    EventType.OTA_BEGIN with the little-endian chunk_size payload."""
+    mock_dispatcher = MockDispatcher()
+    reader = MessageReader(mock_dispatcher)
+
+    data = bytearray([223, 1, 0x00, 0x04])  # RESP_CODE_BEEBO, sub_id=1, chunk_size=1024 LE
+    await reader.handle_rx(data)
+
+    assert len(mock_dispatcher.dispatched_events) == 1
+    event = mock_dispatcher.dispatched_events[0]
+    assert event.type == EventType.OTA_BEGIN
+    assert event.payload == {"chunk_size": 1024}
+
+
+@pytest.mark.asyncio
+async def test_resp_code_beebo_unknown_sub_id_no_dispatch():
+    mock_dispatcher = MockDispatcher()
+    reader = MessageReader(mock_dispatcher)
+
+    data = bytearray([223, 0xFF])
+    await reader.handle_rx(data)
+
+    assert mock_dispatcher.dispatched_events == []
