@@ -476,12 +476,95 @@ class MessageReader:
                                 res['recv_errors'] = recv_errors
                             else:
                                 res['recv_errors'] = None  # legacy 26-byte frame
+                            # beebo fork: firmware appends two more u32s
+                            # (n_direct_dups, n_flood_dups) after recv_errors;
+                            # 38 bytes total when present, absent on older beebo
+                            # builds and every non-beebo firmware.
+                            if len(data) >= 38:
+                                n_direct_dups, n_flood_dups = struct.unpack('<I I', data[30:38])
+                                res['n_direct_dups'] = n_direct_dups
+                                res['n_flood_dups'] = n_flood_dups
                             logger.debug(f"parsed stats packets: {res}")
                             await self.dispatcher.dispatch(Event(EventType.STATS_PACKETS, res))
                         except struct.error as e:
                             logger.error(f"Error parsing stats packets binary frame: {e}, data: {data.hex()}")
                             await self.dispatcher.dispatch(Event(EventType.ERROR, {"reason": f"binary_parse_error: {e}"}))
-                
+
+                elif stats_type == 3:  # beebo fork: STATS_TYPE_SYSTEM (heap/psram/flash/temp)
+                    if len(data) < 16:
+                        logger.error(f"Stats system response too short: {len(data)} bytes, expected >= 16")
+                        await self.dispatcher.dispatch(Event(EventType.ERROR, {"reason": "invalid_frame_length"}))
+                    else:
+                        try:
+                            free_heap, free_psram, flash_size = struct.unpack('<I I I', data[2:14])
+                            mcu_temp_scaled = struct.unpack('<h', data[14:16])[0]
+                            res = {
+                                'free_heap': free_heap,
+                                'free_psram': free_psram,
+                                'flash_size': flash_size,
+                                'mcu_temp': mcu_temp_scaled / 10.0,
+                            }
+                            # Totals/pending/contacts/MonRing state appended by
+                            # newer firmware; absent on older builds.
+                            if len(data) >= 32:
+                                total_heap, total_psram, sketch_used, sketch_total = \
+                                    struct.unpack('<I I I I', data[16:32])
+                                res.update({
+                                    'total_heap': total_heap,
+                                    'total_psram': total_psram,
+                                    'sketch_used': sketch_used,
+                                    'sketch_total': sketch_total,
+                                })
+                                if len(data) >= 34:
+                                    res['pending_msgs'] = struct.unpack('<H', data[32:34])[0]
+                                if len(data) >= 36:
+                                    res['num_contacts'] = struct.unpack('<H', data[34:36])[0]
+                                if len(data) >= 45:
+                                    res['monring_enabled'] = bool(data[36])
+                                    res['monring_count'], res['monring_cap'] = \
+                                        struct.unpack('<I I', data[37:45])
+                            await self.dispatcher.dispatch(Event(EventType.STATS_SYSTEM, res))
+                        except struct.error as e:
+                            logger.error(f"Error parsing stats system binary frame: {e}, data: {data.hex()}")
+                            await self.dispatcher.dispatch(Event(EventType.ERROR, {"reason": f"binary_parse_error: {e}"}))
+
+                elif stats_type in (4, 5):  # beebo fork: STATS_TYPE_TRANSPORT / STATS_TYPE_PROFILE
+                    # Both are paginated event rings: <B B H H> header
+                    # (code, stats_type, total, offset) then back-to-back
+                    # events, each a 4-byte millis timestamp + type-specific
+                    # fields (event_size includes the millis prefix).
+                    if stats_type == 4:
+                        event_name, event_size = EventType.STATS_TRANSPORT, 9
+
+                        def decode_fields(d, pos):
+                            return {'type': d[pos], 'detail': struct.unpack_from('<i', d, pos + 1)[0]}
+                    else:
+                        event_name, event_size = EventType.STATS_PROFILE, 8
+
+                        def decode_fields(d, pos):
+                            return {'id': d[pos] | (d[pos + 1] << 8),
+                                    'duration_us': d[pos + 2] | (d[pos + 3] << 8)}
+
+                    if len(data) < 6:
+                        logger.error(f"Stats ring response too short: {len(data)} bytes, expected >= 6")
+                        await self.dispatcher.dispatch(Event(EventType.ERROR, {"reason": "invalid_frame_length"}))
+                    else:
+                        try:
+                            total = struct.unpack('<H', data[2:4])[0]
+                            offset = struct.unpack('<H', data[4:6])[0]
+                            events = []
+                            pos = 6
+                            while pos + event_size <= len(data):
+                                ms = struct.unpack('<I', data[pos:pos + 4])[0]
+                                fields = decode_fields(data, pos + 4)
+                                events.append({'millis': ms, **fields})
+                                pos += event_size
+                            await self.dispatcher.dispatch(Event(
+                                event_name, {'total': total, 'offset': offset, 'events': events}))
+                        except struct.error as e:
+                            logger.error(f"Error parsing stats ring binary frame: {e}, data: {data.hex()}")
+                            await self.dispatcher.dispatch(Event(EventType.ERROR, {"reason": f"binary_parse_error: {e}"}))
+
                 else:
                     logger.error(f"Unknown stats type: {stats_type}, data: {data.hex()}")
                     await self.dispatcher.dispatch(Event(EventType.ERROR, {"reason": f"unknown_stats_type: {stats_type}"}))
@@ -981,17 +1064,66 @@ class MessageReader:
 
             elif packet_type_value == PacketType.RESP_CODE_BEEBO.value:
                 # CMD_BEEBO/RESP_CODE_BEEBO umbrella: every beebo action is a
-                # sub-id byte after this code. Only OTA_BEGIN (sub-id 1) is
-                # decoded natively here; beebo's own CLI decodes the rest via
-                # mc.commands.send()'s waiter directly against BINARY_RESPONSE-
-                # style tag matching where applicable.
-                if len(data) >= 2 and data[1] == 1:  # BEEBO_RESP_OTA_BEGIN
-                    chunk_size = int.from_bytes(data[2:4], byteorder="little")
-                    await self.dispatcher.dispatch(
-                        Event(EventType.OTA_BEGIN, {"chunk_size": chunk_size})
-                    )
+                # sub-id byte after this code. See beebo-meshcore-dev's
+                # protocol.yaml for the authoritative sub-id table; MonRing
+                # (5) and XferCaps (6) aren't decoded here -- they stay a
+                # CLI-side reader patch (beebo/src/beebo/monitor.py) since
+                # their record layout is beebo-application-specific, not a
+                # generic wire primitive like the ones below.
+                if len(data) < 2:
+                    logger.debug(f"RESP_CODE_BEEBO frame too short: {data.hex()}")
                 else:
-                    logger.debug(f"Unhandled RESP_CODE_BEEBO sub-id in {data.hex()}")
+                    sub_id = data[1]
+                    if sub_id == 1:  # BEEBO_RESP_OTA_BEGIN
+                        chunk_size = int.from_bytes(data[2:4], byteorder="little")
+                        await self.dispatcher.dispatch(
+                            Event(EventType.OTA_BEGIN, {"chunk_size": chunk_size}))
+                    elif sub_id == 7:  # BEEBO_RESP_FULL_VERSION
+                        ver = bytes(data[2:]).decode("utf-8", "ignore")
+                        await self.dispatcher.dispatch(Event(EventType.FULL_VERSION, {"ver": ver}))
+                    elif sub_id == 9 and len(data) >= 14:  # BEEBO_RESP_ACK_STATS
+                        success, timeout, overflow = struct.unpack("<III", data[2:14])
+                        await self.dispatcher.dispatch(Event(EventType.ACK_STATS, {
+                            "ack_success_count": success, "ack_timeout_count": timeout,
+                            "ack_overflow_count": overflow,
+                        }))
+                    elif sub_id == 10 and len(data) >= 18:  # BEEBO_RESP_ECHO_STATS
+                        heard, not_heard, overflow, self_tx_direct = struct.unpack("<IIII", data[2:18])
+                        await self.dispatcher.dispatch(Event(EventType.ECHO_STATS, {
+                            "echo_success_count": heard, "echo_timeout_count": not_heard,
+                            "echo_overflow_count": overflow, "self_tx_direct_count": self_tx_direct,
+                        }))
+                    elif sub_id == 11:  # BEEBO_RESP_REGION_HOME
+                        name = bytes(data[2:]).decode("utf-8", "ignore")
+                        await self.dispatcher.dispatch(Event(EventType.REGION_HOME, {"name": name}))
+                    elif sub_id == 12:  # BEEBO_RESP_REGION_LIST
+                        names = bytes(data[2:]).decode("utf-8", "ignore")
+                        await self.dispatcher.dispatch(Event(EventType.REGION_LIST, {"names": names}))
+                    elif sub_id == 13:  # BEEBO_RESP_REGION_TREE
+                        text = bytes(data[2:]).decode("utf-8", "ignore")
+                        await self.dispatcher.dispatch(Event(EventType.REGION_TREE, {"text": text}))
+                    elif sub_id == 17 and len(data) >= 34:  # BEEBO_RESP_PUBLIC_KEY
+                        pub = bytes(data[2:34]).hex()
+                        await self.dispatcher.dispatch(Event(EventType.ROLE_PUBLIC_KEY, {"public_key": pub}))
+                    elif sub_id == 18 and len(data) >= 8:  # BEEBO_RESP_BOARD_ID
+                        board_id = bytes(data[2:8]).hex()
+                        await self.dispatcher.dispatch(Event(EventType.BOARD_ID, {"board_id": board_id}))
+                    elif sub_id == 19:  # BEEBO_RESP_ROLE_SECRETS
+                        # payload: guest_password + NUL + wifi_pwd + NUL + repeater_pwd,
+                        # always in this order (any may be empty).
+                        parts = bytes(data[2:]).split(b"\x00", 2)
+                        parts += [b""] * (3 - len(parts))
+                        guest_pwd, wifi_pwd, repeater_pwd = parts
+                        await self.dispatcher.dispatch(Event(EventType.ROLE_SECRETS, {
+                            "guest_password": guest_pwd.decode("utf-8", "ignore"),
+                            "wifi_password": wifi_pwd.decode("utf-8", "ignore"),
+                            "repeater_password": repeater_pwd.decode("utf-8", "ignore"),
+                        }))
+                    elif sub_id == 20:  # BEEBO_RESP_REGION_DEFAULT
+                        name = bytes(data[2:]).decode("utf-8", "ignore")
+                        await self.dispatcher.dispatch(Event(EventType.REGION_DEFAULT, {"name": name}))
+                    else:
+                        logger.debug(f"Unhandled RESP_CODE_BEEBO sub-id in {data.hex()}")
 
             else:
                 logger.debug(f"Unhandled data received {data}")

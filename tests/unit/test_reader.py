@@ -304,3 +304,87 @@ async def test_resp_code_beebo_unknown_sub_id_no_dispatch():
     await reader.handle_rx(data)
 
     assert mock_dispatcher.dispatched_events == []
+
+
+@pytest.mark.asyncio
+async def test_stats_type_system_decodes_minimal():
+    import struct
+    mock_dispatcher = MockDispatcher()
+    reader = MessageReader(mock_dispatcher)
+
+    frame = (bytes([24, 3]) + struct.pack('<III', 1000, 2000, 4000000)
+             + struct.pack('<h', 250))
+    await reader.handle_rx(bytearray(frame))
+
+    payload = mock_dispatcher.dispatched_events[0].payload
+    assert mock_dispatcher.dispatched_events[0].type == EventType.STATS_SYSTEM
+    assert payload["mcu_temp"] == 25.0
+    assert "total_heap" not in payload
+
+
+@pytest.mark.asyncio
+async def test_stats_type_system_decodes_totals_and_monring():
+    import struct
+    mock_dispatcher = MockDispatcher()
+    reader = MessageReader(mock_dispatcher)
+
+    frame = (bytes([24, 3]) + struct.pack('<III', 1000, 2000, 4000000)
+             + struct.pack('<h', 250)
+             + struct.pack('<IIII', 300000, 8000000, 500000, 1000000)
+             + struct.pack('<H', 3) + struct.pack('<H', 7)
+             + bytes([1]) + struct.pack('<II', 100, 5000))
+    await reader.handle_rx(bytearray(frame))
+
+    payload = mock_dispatcher.dispatched_events[0].payload
+    assert payload["total_heap"] == 300000
+    assert payload["pending_msgs"] == 3
+    assert payload["num_contacts"] == 7
+    assert payload["monring_enabled"] is True
+    assert payload["monring_count"] == 100
+    assert payload["monring_cap"] == 5000
+
+
+@pytest.mark.asyncio
+async def test_stats_type_packets_decodes_beebo_dup_fields():
+    import struct
+    mock_dispatcher = MockDispatcher()
+    reader = MessageReader(mock_dispatcher)
+
+    frame = bytes([24, 2]) + struct.pack('<IIIIIIIII', 1, 2, 3, 4, 5, 6, 7, 8, 9)
+    await reader.handle_rx(bytearray(frame))
+
+    payload = mock_dispatcher.dispatched_events[0].payload
+    assert mock_dispatcher.dispatched_events[0].type == EventType.STATS_PACKETS
+    assert payload["n_direct_dups"] == 8
+    assert payload["n_flood_dups"] == 9
+
+
+@pytest.mark.asyncio
+async def test_stats_type_transport_decodes_ring_page():
+    import struct
+    mock_dispatcher = MockDispatcher()
+    reader = MessageReader(mock_dispatcher)
+
+    header = bytes([24, 4]) + struct.pack('<HH', 1, 0)
+    event = struct.pack('<I', 100) + bytes([1]) + struct.pack('<i', 1)
+    await reader.handle_rx(bytearray(header + event))
+
+    ev = mock_dispatcher.dispatched_events[0]
+    assert ev.type == EventType.STATS_TRANSPORT
+    assert ev.payload["total"] == 1
+    assert ev.payload["events"] == [{"millis": 100, "type": 1, "detail": 1}]
+
+
+@pytest.mark.asyncio
+async def test_role_public_key_and_region_home_decode():
+    mock_dispatcher = MockDispatcher()
+    reader = MessageReader(mock_dispatcher)
+
+    pubkey = "aa" * 32
+    await reader.handle_rx(bytearray(bytes([223, 17]) + bytes.fromhex(pubkey)))
+    assert mock_dispatcher.dispatched_events[0].type == EventType.ROLE_PUBLIC_KEY
+    assert mock_dispatcher.dispatched_events[0].payload["public_key"] == pubkey
+
+    await reader.handle_rx(bytearray(bytes([223, 11]) + b"home1"))
+    assert mock_dispatcher.dispatched_events[1].type == EventType.REGION_HOME
+    assert mock_dispatcher.dispatched_events[1].payload["name"] == "home1"

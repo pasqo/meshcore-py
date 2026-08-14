@@ -13,6 +13,12 @@ TCP_DISCONNECT_THRESHOLD = 5
 
 
 class TCPConnection:
+    # Inbound frame-size cap. A class attribute (not a hardcoded literal in
+    # handle_rx) so a subclass/instance can raise it for large streamed
+    # payloads (e.g. beebo's MonRing STEP pages, negotiated up front via
+    # CMD_SET_XFER_CAPS) without having to reimplement handle_rx.
+    max_frame_size = 300
+
     def __init__(self, host, port):
         self.host = host
         self.port = port
@@ -93,7 +99,7 @@ class TCPConnection:
 
             # get size and check
             self.frame_expected_size = int.from_bytes(self.header[1:], "little", signed=False)
-            if self.frame_expected_size > 300 : # invalid size
+            if self.frame_expected_size > self.max_frame_size : # invalid size
                 # reset inframe
                 self.header = b""
                 self.inframe = b""

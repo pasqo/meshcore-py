@@ -60,8 +60,25 @@ class EventType(Enum):
     ALLOWED_REPEAT_FREQ = "allowed_repeat_freq"
     DEFAULT_FLOOD_SCOPE = "default_flood_scope"
 
-    # beebo fork: reply to CMD_BEEBO's OTA_BEGIN sub-id (RESP_CODE_BEEBO umbrella)
+    # beebo fork: replies to CMD_BEEBO sub-ids (RESP_CODE_BEEBO umbrella).
+    # See beebo-meshcore-dev's protocol.yaml for the sub-id table.
     OTA_BEGIN = "ota_begin_reply"
+    FULL_VERSION = "full_version_reply"
+    ACK_STATS = "ack_stats_reply"
+    ECHO_STATS = "echo_stats_reply"
+    REGION_HOME = "region_home_reply"
+    REGION_LIST = "region_list_reply"
+    REGION_TREE = "region_tree_reply"
+    REGION_DEFAULT = "region_default_reply"
+    ROLE_PUBLIC_KEY = "role_public_key_reply"
+    BOARD_ID = "board_id_reply"
+    ROLE_SECRETS = "role_secrets_reply"
+
+    # beebo fork: RESP_CODE_STATS (24) sub-types the stock parser doesn't
+    # know about (core/radio/packets are handled natively already).
+    STATS_SYSTEM = "stats_system"
+    STATS_TRANSPORT = "stats_transport"
+    STATS_PROFILE = "stats_profile"
 
     # Command response types
     OK = "command_ok"
