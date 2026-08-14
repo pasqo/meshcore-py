@@ -979,6 +979,20 @@ class MessageReader:
                 res = {"rx_delay": rx_delay, "airtime_factor": airtime_factor}
                 await self.dispatcher.dispatch(Event(EventType.TUNING_PARAMS, res))
 
+            elif packet_type_value == PacketType.RESP_CODE_BEEBO.value:
+                # CMD_BEEBO/RESP_CODE_BEEBO umbrella: every beebo action is a
+                # sub-id byte after this code. Only OTA_BEGIN (sub-id 1) is
+                # decoded natively here; beebo's own CLI decodes the rest via
+                # mc.commands.send()'s waiter directly against BINARY_RESPONSE-
+                # style tag matching where applicable.
+                if len(data) >= 2 and data[1] == 1:  # BEEBO_RESP_OTA_BEGIN
+                    chunk_size = int.from_bytes(data[2:4], byteorder="little")
+                    await self.dispatcher.dispatch(
+                        Event(EventType.OTA_BEGIN, {"chunk_size": chunk_size})
+                    )
+                else:
+                    logger.debug(f"Unhandled RESP_CODE_BEEBO sub-id in {data.hex()}")
+
             else:
                 logger.debug(f"Unhandled data received {data}")
                 logger.debug(f"Unhandled packet type: {packet_type_value}")

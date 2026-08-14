@@ -60,6 +60,9 @@ class EventType(Enum):
     ALLOWED_REPEAT_FREQ = "allowed_repeat_freq"
     DEFAULT_FLOOD_SCOPE = "default_flood_scope"
 
+    # beebo fork: reply to CMD_BEEBO's OTA_BEGIN sub-id (RESP_CODE_BEEBO umbrella)
+    OTA_BEGIN = "ota_begin_reply"
+
     # Command response types
     OK = "command_ok"
     ERROR = "command_error"

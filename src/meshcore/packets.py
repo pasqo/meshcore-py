@@ -127,3 +127,8 @@ class PacketType(Enum):
     CONTACTS_FULL = 0x90  # N02: MyMesh::onContactsFull() — 1-byte push, no payload
     # Note: 0x90 == ControlType.NODE_DISCOVER_RESP in a different namespace.
     # Not a literal conflict (PacketType vs ControlType), but a maintenance hazard.
+
+    # beebo fork: RESP_CODE_BEEBO umbrella (CMD_BEEBO=222/RESP_CODE_BEEBO=223),
+    # every beebo action framed as a sub-id byte after this code. See
+    # beebo-meshcore-dev's protocol.yaml for the sub-id table.
+    RESP_CODE_BEEBO = 223
