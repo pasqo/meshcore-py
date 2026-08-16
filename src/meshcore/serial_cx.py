@@ -42,6 +42,22 @@ class SerialConnection:
             logger.debug('port opened')
             if isinstance(transport, serial_asyncio.SerialTransport) and transport.serial:
                 transport.serial.rts = False  # You can manipulate Serial object via transport
+                # A fresh connect can still receive bytes the OS's USB CDC
+                # driver had queued from the *previous*, already-closed
+                # session before this session's own traffic starts -- the
+                # kernel-level CDC ACM input queue isn't guaranteed to be
+                # discarded just because the previous process closed its fd.
+                # Flush it so those stray bytes can't desync handle_rx's
+                # frame parser before the real handshake even starts.
+                try:
+                    transport.serial.reset_input_buffer()
+                except Exception:
+                    logger.debug('reset_input_buffer failed', exc_info=True)
+            # Defensive: reset our own frame-parser state too, in case any
+            # data slipped through before this callback ran.
+            self.cx.header = b""
+            self.cx.inframe = b""
+            self.cx.frame_expected_size = 0
             self.cx._connected_event.set()
 
         def data_received(self, data):
