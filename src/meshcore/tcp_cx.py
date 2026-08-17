@@ -50,6 +50,17 @@ class TCPConnection:
             # Reset counters on new connection
             self.cx._send_count = 0
             self.cx._receive_count = 0
+            # Defensive: reset our own frame-parser state too, in case a
+            # previous session left it mid-frame -- same fix as
+            # SerialConnection.connection_made() (38e9363), applied here for
+            # symmetry. Only self.cx.header/inframe/frame_expected_size need
+            # resetting; TCP has no OS-level input-buffer-flush equivalent to
+            # SerialConnection's reset_input_buffer() (a closed TCP socket's
+            # kernel receive buffer can't outlive the connection the way a
+            # USB CDC ACM queue can survive its owning process exiting).
+            self.cx.header = b""
+            self.cx.inframe = b""
+            self.cx.frame_expected_size = 0
             logger.debug("connection established")
 
         def data_received(self, data):
