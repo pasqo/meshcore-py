@@ -14,9 +14,11 @@ TCP_DISCONNECT_THRESHOLD = 5
 
 class TCPConnection:
     # Inbound frame-size cap. A class attribute (not a hardcoded literal in
-    # handle_rx) so a subclass/instance can raise it for large streamed
-    # payloads (e.g. beebo's MonRing STEP pages, negotiated up front via
-    # CMD_SET_XFER_CAPS) without having to reimplement handle_rx.
+    # handle_rx) so a caller that knows its own protocol's real frame-size
+    # ceiling -- which meshcore-py has no way to know on its own, since it
+    # can change on the firmware side independently -- can raise it via
+    # MeshCore.create_tcp(..., max_frame_size=...) instead of a fixed guess
+    # baked in here going stale.
     max_frame_size = 300
 
     def __init__(self, host, port):

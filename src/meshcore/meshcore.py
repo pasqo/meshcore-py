@@ -88,9 +88,12 @@ class MeshCore:
         default_timeout=None,
         auto_reconnect: bool = False,
         max_reconnect_attempts: int = 3,
+        max_frame_size: Optional[int] = None,
     ) -> "MeshCore":
         """Create and connect a MeshCore instance using TCP connection"""
         connection = TCPConnection(host, port)
+        if max_frame_size is not None:
+            connection.max_frame_size = max_frame_size
 
         mc = cls(
             connection,
@@ -118,9 +121,12 @@ class MeshCore:
         auto_reconnect: bool = False,
         max_reconnect_attempts: int = 3,
         cx_dly: float = 0.1,
+        max_frame_size: Optional[int] = None,
     ) -> "MeshCore":
         """Create and connect a MeshCore instance using serial connection"""
         connection = SerialConnection(port, baudrate, cx_dly=cx_dly)
+        if max_frame_size is not None:
+            connection.max_frame_size = max_frame_size
 
         mc = cls(
             connection,

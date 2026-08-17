@@ -11,6 +11,15 @@ logger = logging.getLogger("meshcore")
 
 
 class SerialConnection:
+    # Inbound frame-size cap. A class/instance attribute (not a hardcoded
+    # literal in handle_rx) so a caller that knows its own protocol's real
+    # frame-size ceiling -- which meshcore-py has no way to know on its own,
+    # since it can change on the firmware side independently -- can raise it
+    # via MeshCore.create_serial(..., max_frame_size=...) instead of a fixed
+    # guess baked in here going stale. Matches TCPConnection's own
+    # max_frame_size mechanism.
+    max_frame_size = 300
+
     def __init__(self, port, baudrate, cx_dly=0.2):
         self.port = port
         self.baudrate = baudrate
@@ -123,7 +132,7 @@ class SerialConnection:
 
             # get size and check
             self.frame_expected_size = int.from_bytes(self.header[1:], "little", signed=False)
-            if self.frame_expected_size > 300 : # invalid size
+            if self.frame_expected_size > self.max_frame_size : # invalid size
                 # reset inframe
                 self.header = b""
                 self.inframe = b""
