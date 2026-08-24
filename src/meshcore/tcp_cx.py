@@ -29,6 +29,10 @@ class TCPConnection:
         self._disconnect_callback = None
         self._send_count = 0
         self._receive_count = 0
+        # beebo: set by connection_lost() when the peer closes the socket
+        # having never sent us a single frame -- see connection_lost()'s
+        # own comment and MeshCore.create_tcp()'s use of this flag.
+        self.rejected = False
         self.frame_expected_size = 0
         self.header = b""
         self.inframe = b""
@@ -72,6 +76,16 @@ class TCPConnection:
 
         def connection_lost(self, exc):
             logger.debug("TCP server closed the connection")
+            # beebo: distinguishes an active device-side rejection (e.g.
+            # another client already holds the exclusive session --
+            # SerialWifiInterface::checkRecvFrame() stops the socket right
+            # after accept(), before anything is ever exchanged) from a
+            # genuine transient no-response, where the socket stays open
+            # and only the awaited reply never arrives. See
+            # MeshCore.create_tcp()'s use of this flag.
+            if self.cx._receive_count == 0:
+                self.cx.rejected = True
+            self.cx.transport = None
             if self.cx._disconnect_callback:
                 self.cx._spawn_background(self.cx._disconnect_callback("tcp_disconnect"))
 

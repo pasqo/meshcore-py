@@ -4,7 +4,7 @@ import logging
 from .ble_cx import BLEConnection
 from .connection_manager import ConnectionManager
 from .events import EventType
-from .meshcore import MeshCore
+from .meshcore import ConnectionRejectedError, MeshCore
 from .packets import BinaryReqType
 from .serial_cx import SerialConnection
 from .tcp_cx import TCPConnection
@@ -17,6 +17,7 @@ __all__ = [
     "BinaryReqType",
     "BLEConnection",
     "ConnectionManager",
+    "ConnectionRejectedError",
     "EventType",
     "MeshCore",
     "SerialConnection",

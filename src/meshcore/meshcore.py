@@ -14,6 +14,15 @@ from .serial_cx import SerialConnection
 logger = logging.getLogger("meshcore")
 
 
+class ConnectionRejectedError(Exception):
+    """Raised by create_tcp() when the device actively closed the socket
+    before ever exchanging a frame -- e.g. another client already holds
+    the exclusive session (see TCPConnection.rejected's own comment).
+    Distinct from a plain no-response timeout: retrying won't help until
+    whatever is holding the session lets go, so callers should surface
+    this once rather than retrying blindly."""
+
+
 class MeshCore:
     """
     Interface to a MeshCore device
@@ -105,7 +114,12 @@ class MeshCore:
         )
         res = await mc.connect()
         if res is None:
-            logger.error("No response from meshcore node, disconnecting")
+            if connection.rejected:
+                msg = "Device rejected the connection -- another client already holds the session"
+                logger.warning(msg)
+                await mc.disconnect()
+                raise ConnectionRejectedError(msg)
+            logger.warning("No response from meshcore node, disconnecting")
             await mc.disconnect()
             return None
         return mc
@@ -138,8 +152,8 @@ class MeshCore:
         )
         res = await mc.connect()
         if res is None:
-            logger.error("No response from meshcore node, disconnecting")
-            logger.error("Are you sure your node is a serial companion ?")
+            logger.warning("No response from meshcore node, disconnecting")
+            logger.warning("Are you sure your node is a serial companion ?")
             await mc.disconnect()
             return None
         return mc
@@ -182,7 +196,7 @@ class MeshCore:
 
         res = await mc.connect()
         if res is None:
-            logger.error("No response from meshcore node, disconnecting")
+            logger.warning("No response from meshcore node, disconnecting")
             await mc.disconnect()
             return None
         return mc
