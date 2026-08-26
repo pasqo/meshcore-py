@@ -216,7 +216,17 @@ class MeshCore:
         if result is None:
             await self.dispatcher.stop()
             raise ConnectionError("Failed to connect to device")
-        res = await self.commands.send_appstart()
+        try:
+            res = await self.commands.send_appstart()
+        except BaseException:
+            # An interrupt (Ctrl-C) or cancellation while awaiting the
+            # APP_START reply would otherwise leave the transport-level
+            # connection open with no CMD_APP_DISCONNECT ever sent -- the
+            # device then has to fall back on its own disconnect-debounce
+            # timeout to notice and release the session. Disconnect
+            # cleanly here before re-raising.
+            await self.disconnect()
+            raise
         if res is None or res.type == EventType.ERROR:
             return None
         return res
