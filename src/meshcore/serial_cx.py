@@ -34,6 +34,17 @@ class SerialConnection:
         self.frame_expected_size = 0
         self.inframe = b""
         self.header = b""
+        self._raw_byte_callback = None
+
+    def set_raw_byte_callback(self, callback):
+        """Register CALLBACK(bytes) to receive any bytes handle_rx() would
+        otherwise silently discard because they aren't part of a companion
+        frame envelope (0x3E + 2-byte length + payload) -- e.g. console/
+        debug text a radio interleaves on the same UART (see handle_rx()'s
+        own comment). None (the default) restores the original discard-
+        silently behavior. Never called from more than one place at a time
+        (handle_rx runs synchronously), so no locking needed."""
+        self._raw_byte_callback = callback
 
     def _spawn_background(self, coro) -> asyncio.Task:
         """Create a tracked background task (prevents GC of fire-and-forget tasks)."""
@@ -115,10 +126,17 @@ class SerialConnection:
             # search start of frame (0x3e) in data
             idx = data.find(b"\x3e")
             if idx < 0: # no start of frame
+                if self._raw_byte_callback:
+                    self._raw_byte_callback(bytes(data))
                 return
             # Discard any leading junk bytes before the actual frame marker.
             # Some radios interleave console/debug text on the same UART, so
             # valid companion frames may begin at an offset inside the chunk.
+            # (Handed to _raw_byte_callback first if one is registered --
+            # see set_raw_byte_callback's own comment -- default behavior is
+            # unchanged, still a silent discard.)
+            if idx > 0 and self._raw_byte_callback:
+                self._raw_byte_callback(bytes(data[:idx]))
             data = data[idx:]
             self.header = data[0:1]
             data = data[1:]
@@ -133,6 +151,13 @@ class SerialConnection:
             # get size and check
             self.frame_expected_size = int.from_bytes(self.header[1:], "little", signed=False)
             if self.frame_expected_size > self.max_frame_size : # invalid size
+                # The 3 header bytes (a false 0x3E plus 2 garbage length
+                # bytes) turned out not to be a real frame after all --
+                # hand them to the callback too before discarding, so a raw
+                # text reconstruction doesn't have a 3-byte gap where a
+                # literal '>' happened to appear in console output.
+                if self._raw_byte_callback:
+                    self._raw_byte_callback(self.header)
                 # reset inframe
                 self.header = b""
                 self.inframe = b""
