@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from meshcore.serial_cx import SerialConnection
+from meshcore.serial_cx import AttachedSerialConnection, SerialConnection
 
 
 class RecordingReader:
@@ -102,3 +102,100 @@ async def test_handle_rx_forwards_invalid_size_header_bytes_to_callback():
 
     assert reader.frames == []
     assert bytes(captured) == bogus_header + b"more text\n"
+
+
+# --------------------------------------------------------------------------
+# AttachedSerialConnection -- see beebo's debug_link.py for the real owner
+# --------------------------------------------------------------------------
+
+class RecordingOwner:
+    def __init__(self):
+        self.attached = None
+        self.detached = None
+        self.written = []
+
+    def attach(self, sink):
+        self.attached = sink
+
+    def detach(self, sink):
+        self.detached = sink
+
+    def write_raw(self, data):
+        self.written.append(data)
+
+
+@pytest.mark.asyncio
+async def test_attached_connect_registers_as_owners_sink():
+    owner = RecordingOwner()
+    conn = AttachedSerialConnection(owner, "/dev/ttyACM0")
+
+    result = await conn.connect()
+
+    assert result == "/dev/ttyACM0"
+    assert owner.attached is conn
+
+
+@pytest.mark.asyncio
+async def test_attached_disconnect_detaches_from_owner():
+    owner = RecordingOwner()
+    conn = AttachedSerialConnection(owner, "/dev/ttyACM0")
+    await conn.connect()
+
+    await conn.disconnect()
+
+    assert owner.detached is conn
+
+
+@pytest.mark.asyncio
+async def test_attached_send_writes_framed_packet_via_owner():
+    owner = RecordingOwner()
+    conn = AttachedSerialConnection(owner, "/dev/ttyACM0")
+
+    await conn.send(b"\x01\x02\x03")
+
+    assert owner.written == [b"\x3c\x03\x00\x01\x02\x03"]
+
+
+@pytest.mark.asyncio
+async def test_attached_handle_rx_forwards_to_reader():
+    owner = RecordingOwner()
+    conn = AttachedSerialConnection(owner, "/dev/ttyACM0")
+    reader = RecordingReader()
+    conn.set_reader(reader)
+
+    conn.handle_rx(b"\x00\x01\x02\x53")
+    await asyncio.sleep(0)
+
+    assert reader.frames == [b"\x00\x01\x02\x53"]
+
+
+@pytest.mark.asyncio
+async def test_attached_handle_rx_no_reader_does_not_raise():
+    owner = RecordingOwner()
+    conn = AttachedSerialConnection(owner, "/dev/ttyACM0")
+
+    conn.handle_rx(b"\x00\x01")  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_attached_notify_disconnected_invokes_callback():
+    owner = RecordingOwner()
+    conn = AttachedSerialConnection(owner, "/dev/ttyACM0")
+    seen = []
+
+    async def _cb(reason):
+        seen.append(reason)
+
+    conn.set_disconnect_callback(_cb)
+    conn.notify_disconnected("debug_link_lost")
+    await asyncio.sleep(0)
+
+    assert seen == ["debug_link_lost"]
+
+
+@pytest.mark.asyncio
+async def test_attached_notify_disconnected_no_callback_does_not_raise():
+    owner = RecordingOwner()
+    conn = AttachedSerialConnection(owner, "/dev/ttyACM0")
+
+    conn.notify_disconnected("debug_link_lost")  # must not raise

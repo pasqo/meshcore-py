@@ -211,3 +211,69 @@ class SerialConnection:
     def set_disconnect_callback(self, callback):
         """Set callback to handle disconnections."""
         self._disconnect_callback = callback
+
+
+class AttachedSerialConnection:
+    """A ConnectionProtocol (see connection_manager.py) that attaches to an
+    externally-owned serial Transport instead of opening its own via
+    serial_asyncio.create_serial_connection() -- for a caller that already
+    has one open (e.g. beebo's persistent USB debug link, which owns the
+    physical port for its whole lifetime and hands sessions a shared
+    Transport instead of letting each one open a second, competing handle
+    on the same port). Implements the same small surface MeshCore/
+    ConnectionManager/CommandHandler already only depend on
+    (connect/disconnect/send/set_reader/set_disconnect_callback) -- nothing
+    here needs a change to any of those.
+
+    OWNER supplies: attach(sink)/detach(sink) (register/unregister this as
+    the frame-forwarding target) and write_raw(bytes) (write already-framed
+    bytes to its own Transport). See beebo's debug_link.py for OWNER's
+    implementation.
+    """
+
+    def __init__(self, owner, port: str):
+        self.owner = owner
+        self.port = port
+        self.reader = None
+        self._disconnect_callback = None
+        self._background_tasks: set = set()
+
+    def _spawn_background(self, coro) -> asyncio.Task:
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
+
+    async def connect(self, timeout: float = 10.0):
+        self.owner.attach(self)
+        return self.port
+
+    def set_reader(self, reader):
+        self.reader = reader
+
+    def handle_rx(self, payload: bytes) -> None:
+        """Called by OWNER's own frame demux for a frame payload that
+        isn't its own debug-event traffic -- already stripped of the
+        0x3E/length envelope, the same shape SerialConnection.handle_rx()
+        hands its own reader."""
+        if self.reader is not None:
+            self._spawn_background(self.reader.handle_rx(bytearray(payload)))
+
+    async def send(self, data):
+        size = len(data)
+        pkt = b"\x3c" + size.to_bytes(2, byteorder="little") + data
+        logger.debug(f"sending pkt (attached): {pkt}")
+        self.owner.write_raw(pkt)
+
+    async def disconnect(self):
+        self.owner.detach(self)
+
+    def set_disconnect_callback(self, callback):
+        self._disconnect_callback = callback
+
+    def notify_disconnected(self, reason: str) -> None:
+        """Called by OWNER when its underlying Transport is lost -- the
+        attached-connection equivalent of MCSerialClientProtocol's own
+        connection_lost() forwarding to ConnectionManager.handle_disconnect."""
+        if self._disconnect_callback:
+            self._spawn_background(self._disconnect_callback(reason))
