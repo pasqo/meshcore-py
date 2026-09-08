@@ -529,6 +529,13 @@ class MessageReader:
                                     res['rx_time_pct'] = data[45]
                                     res['tx_time_pct'] = data[46]
                                     res['cli_time_pct'] = data[47]
+                                # beebo fork: headroom metrics (loops/sec,
+                                # max single-iteration loop latency ms),
+                                # both reported (10s) tier, absent on
+                                # older/non-accounting builds.
+                                if len(data) >= 52:
+                                    res['loops_per_sec'], res['max_loop_latency_ms'] = \
+                                        struct.unpack('<H H', data[48:52])
                             await self.dispatcher.dispatch(Event(EventType.STATS_SYSTEM, res))
                         except struct.error as e:
                             logger.error(f"Error parsing stats system binary frame: {e}, data: {data.hex()}")

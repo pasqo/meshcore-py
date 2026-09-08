@@ -345,6 +345,29 @@ async def test_stats_type_system_decodes_totals_and_monring():
 
 
 @pytest.mark.asyncio
+async def test_stats_type_system_decodes_time_pct_and_headroom():
+    import struct
+    mock_dispatcher = MockDispatcher()
+    reader = MessageReader(mock_dispatcher)
+
+    frame = (bytes([24, 3]) + struct.pack('<III', 1000, 2000, 4000000)
+             + struct.pack('<h', 250)
+             + struct.pack('<IIII', 300000, 8000000, 500000, 1000000)
+             + struct.pack('<H', 3) + struct.pack('<H', 7)
+             + bytes([1]) + struct.pack('<II', 100, 5000)
+             + bytes([2, 3, 35])
+             + struct.pack('<HH', 1234, 12))
+    await reader.handle_rx(bytearray(frame))
+
+    payload = mock_dispatcher.dispatched_events[0].payload
+    assert payload["rx_time_pct"] == 2
+    assert payload["tx_time_pct"] == 3
+    assert payload["cli_time_pct"] == 35
+    assert payload["loops_per_sec"] == 1234
+    assert payload["max_loop_latency_ms"] == 12
+
+
+@pytest.mark.asyncio
 async def test_stats_type_packets_decodes_beebo_dup_fields():
     import struct
     mock_dispatcher = MockDispatcher()
