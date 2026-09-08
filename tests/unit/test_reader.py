@@ -368,6 +368,33 @@ async def test_stats_type_system_decodes_time_pct_and_headroom():
 
 
 @pytest.mark.asyncio
+async def test_stats_type_system_decodes_route_pcts_and_pkt_rate():
+    import struct
+    mock_dispatcher = MockDispatcher()
+    reader = MessageReader(mock_dispatcher)
+
+    frame = (bytes([24, 3]) + struct.pack('<III', 1000, 2000, 4000000)
+             + struct.pack('<h', 250)
+             + struct.pack('<IIII', 300000, 8000000, 500000, 1000000)
+             + struct.pack('<H', 3) + struct.pack('<H', 7)
+             + bytes([1]) + struct.pack('<II', 100, 5000)
+             + bytes([2, 3, 35])
+             + struct.pack('<HH', 1234, 12)
+             + struct.pack('<HHHHH', 395, 308, 0, 0, 0)
+             + struct.pack('<HH', 42, 7))
+    await reader.handle_rx(bytearray(frame))
+
+    payload = mock_dispatcher.dispatched_events[0].payload
+    assert payload["rx_exec_pct"] == 395
+    assert payload["tx_exec_pct"] == 308
+    assert payload["tx_wait_airtime_pct"] == 0
+    assert payload["tx_wait_cad_pct"] == 0
+    assert payload["rx_wait_pct"] == 0
+    assert payload["rx_per_min"] == 42
+    assert payload["tx_per_min"] == 7
+
+
+@pytest.mark.asyncio
 async def test_stats_type_packets_decodes_beebo_dup_fields():
     import struct
     mock_dispatcher = MockDispatcher()

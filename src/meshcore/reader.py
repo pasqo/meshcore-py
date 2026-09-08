@@ -536,6 +536,19 @@ class MessageReader:
                                 if len(data) >= 52:
                                     res['loops_per_sec'], res['max_loop_latency_ms'] = \
                                         struct.unpack('<H H', data[48:52])
+                                # beebo fork: RouteRecord's exec/wait pcts
+                                # (0-10000 scale, same as MonRing's stored
+                                # RouteRecord), computed live -- no ring
+                                # download needed.
+                                if len(data) >= 62:
+                                    (res['rx_exec_pct'], res['tx_exec_pct'],
+                                     res['tx_wait_airtime_pct'], res['tx_wait_cad_pct'],
+                                     res['rx_wait_pct']) = struct.unpack('<H H H H H', data[52:62])
+                                # beebo fork: Phase 4 live packets/minute,
+                                # reported (10s) tier.
+                                if len(data) >= 66:
+                                    res['rx_per_min'], res['tx_per_min'] = \
+                                        struct.unpack('<H H', data[62:66])
                             await self.dispatcher.dispatch(Event(EventType.STATS_SYSTEM, res))
                         except struct.error as e:
                             logger.error(f"Error parsing stats system binary frame: {e}, data: {data.hex()}")
