@@ -523,12 +523,12 @@ class MessageReader:
                                     res['monring_enabled'] = bool(data[36])
                                     res['monring_count'], res['monring_cap'] = \
                                         struct.unpack('<I I', data[37:45])
-                                # beebo fork: RX/TX/CLI CPU utilization pct
+                                # beebo fork: RX/TX/link CPU utilization pct
                                 # (0-100), absent on older/non-accounting builds.
                                 if len(data) >= 48:
                                     res['rx_time_pct'] = data[45]
                                     res['tx_time_pct'] = data[46]
-                                    res['cli_time_pct'] = data[47]
+                                    res['link_time_pct'] = data[47]
                                 # beebo fork: headroom metrics (loops/sec,
                                 # max single-iteration loop latency ms),
                                 # both reported (10s) tier, absent on

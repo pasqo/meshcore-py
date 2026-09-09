@@ -362,7 +362,7 @@ async def test_stats_type_system_decodes_time_pct_and_headroom():
     payload = mock_dispatcher.dispatched_events[0].payload
     assert payload["rx_time_pct"] == 2
     assert payload["tx_time_pct"] == 3
-    assert payload["cli_time_pct"] == 35
+    assert payload["link_time_pct"] == 35
     assert payload["loops_per_sec"] == 1234
     assert payload["max_loop_latency_ms"] == 12
 
