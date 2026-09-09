@@ -73,6 +73,7 @@ class EventType(Enum):
     ROLE_PUBLIC_KEY = "role_public_key_reply"
     BOARD_ID = "board_id_reply"
     ROLE_SECRETS = "role_secrets_reply"
+    SELF_COMMAND_REPLY = "self_command_reply"
 
     # beebo fork: RESP_CODE_STATS (24) sub-types the stock parser doesn't
     # know about (core/radio/packets are handled natively already).

@@ -1148,6 +1148,9 @@ class MessageReader:
                     elif sub_id == 20:  # BEEBO_RESP_REGION_DEFAULT
                         name = bytes(data[2:]).decode("utf-8", "ignore")
                         await self.dispatcher.dispatch(Event(EventType.REGION_DEFAULT, {"name": name}))
+                    elif sub_id == 23:  # BEEBO_RESP_SELF_COMMAND_REPLY
+                        text = bytes(data[2:]).decode("utf-8", "ignore")
+                        await self.dispatcher.dispatch(Event(EventType.SELF_COMMAND_REPLY, {"text": text}))
                     else:
                         logger.debug(f"Unhandled RESP_CODE_BEEBO sub-id in {data.hex()}")
 
