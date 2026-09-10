@@ -523,32 +523,37 @@ class MessageReader:
                                     res['monring_enabled'] = bool(data[36])
                                     res['monring_count'], res['monring_cap'] = \
                                         struct.unpack('<I I', data[37:45])
-                                # beebo fork: RX/TX/link CPU utilization pct
-                                # (0-100), absent on older/non-accounting builds.
-                                if len(data) >= 48:
-                                    res['rx_time_pct'] = data[45]
-                                    res['tx_time_pct'] = data[46]
-                                    res['link_time_pct'] = data[47]
+                                # beebo fork: RX/TX/LX busy + system idle,
+                                # reported (10s) tier, 0-10000 (two-decimal
+                                # pct precision) -- absent on older/non-
+                                # accounting builds. Supersedes the old
+                                # 0-100 rx_time_pct/tx_time_pct/link_time_pct
+                                # and the separate 60s-window rx_exec_pct/
+                                # tx_exec_pct (same underlying source, now
+                                # unified onto this one window/precision).
+                                if len(data) >= 53:
+                                    (res['rx_busy'], res['tx_busy'], res['lx_busy'],
+                                     res['idle']) = struct.unpack('<H H H H', data[45:53])
                                 # beebo fork: headroom metrics (loops/sec,
                                 # max single-iteration loop latency ms),
                                 # both reported (10s) tier, absent on
                                 # older/non-accounting builds.
-                                if len(data) >= 52:
+                                if len(data) >= 57:
                                     res['loops_per_sec'], res['max_loop_latency_ms'] = \
-                                        struct.unpack('<H H', data[48:52])
-                                # beebo fork: RouteRecord's exec/wait pcts
-                                # (0-10000 scale, same as MonRing's stored
-                                # RouteRecord), computed live -- no ring
-                                # download needed.
-                                if len(data) >= 62:
-                                    (res['rx_exec_pct'], res['tx_exec_pct'],
-                                     res['tx_wait_airtime_pct'], res['tx_wait_cad_pct'],
-                                     res['rx_wait_pct']) = struct.unpack('<H H H H H', data[52:62])
+                                        struct.unpack('<H H', data[53:57])
+                                # beebo fork: resource-wait duty-cycle
+                                # (0-10000 scale), now on the same 10s
+                                # report window as busy/idle above (was a
+                                # separate ~60s-since-last-reset window).
+                                # Never subtracted from busy/idle.
+                                if len(data) >= 63:
+                                    (res['tx_wait_airtime'], res['tx_wait_cad'],
+                                     res['rx_wait']) = struct.unpack('<H H H', data[57:63])
                                 # beebo fork: Phase 4 live packets/minute,
                                 # reported (10s) tier.
-                                if len(data) >= 66:
+                                if len(data) >= 67:
                                     res['rx_per_min'], res['tx_per_min'] = \
-                                        struct.unpack('<H H', data[62:66])
+                                        struct.unpack('<H H', data[63:67])
                             await self.dispatcher.dispatch(Event(EventType.STATS_SYSTEM, res))
                         except struct.error as e:
                             logger.error(f"Error parsing stats system binary frame: {e}, data: {data.hex()}")
