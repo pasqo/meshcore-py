@@ -523,17 +523,19 @@ class MessageReader:
                                     res['monring_enabled'] = bool(data[36])
                                     res['monring_count'], res['monring_cap'] = \
                                         struct.unpack('<I I', data[37:45])
-                                # beebo fork: RX/TX/LX busy + system idle,
-                                # reported (10s) tier, 0-10000 (two-decimal
-                                # pct precision) -- absent on older/non-
-                                # accounting builds. Supersedes the old
-                                # 0-100 rx_time_pct/tx_time_pct/link_time_pct
-                                # and the separate 60s-window rx_exec_pct/
-                                # tx_exec_pct (same underlying source, now
-                                # unified onto this one window/precision).
+                                # beebo fork: RX/TX/LX busy + system lp_idle
+                                # (loop-idle -- everything in loop() that did
+                                # nothing), reported (10s) tier, 0-10000
+                                # (two-decimal pct precision) -- absent on
+                                # older/non-accounting builds. Supersedes the
+                                # old 0-100 rx_time_pct/tx_time_pct/
+                                # link_time_pct and the separate 60s-window
+                                # RouteRecord-only rx_busy/tx_busy live query
+                                # (same underlying source, now unified onto
+                                # this one window/precision).
                                 if len(data) >= 53:
                                     (res['rx_busy'], res['tx_busy'], res['lx_busy'],
-                                     res['idle']) = struct.unpack('<H H H H', data[45:53])
+                                     res['lp_idle']) = struct.unpack('<H H H H', data[45:53])
                                 # beebo fork: headroom metrics (loops/sec,
                                 # max single-iteration loop latency ms),
                                 # both reported (10s) tier, absent on
@@ -543,12 +545,14 @@ class MessageReader:
                                         struct.unpack('<H H', data[53:57])
                                 # beebo fork: resource-wait duty-cycle
                                 # (0-10000 scale), now on the same 10s
-                                # report window as busy/idle above (was a
+                                # report window as busy/lp_idle above (was a
                                 # separate ~60s-since-last-reset window).
-                                # Never subtracted from busy/idle.
+                                # Never subtracted from busy/lp_idle.
+                                # rx_wait_relay: how much a flood relay's
+                                # send overran its own scheduled time.
                                 if len(data) >= 63:
                                     (res['tx_wait_airtime'], res['tx_wait_cad'],
-                                     res['rx_wait']) = struct.unpack('<H H H', data[57:63])
+                                     res['rx_wait_relay']) = struct.unpack('<H H H', data[57:63])
                                 # beebo fork: Phase 4 live packets/minute,
                                 # reported (10s) tier.
                                 if len(data) >= 67:

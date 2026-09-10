@@ -363,7 +363,7 @@ async def test_stats_type_system_decodes_busy_idle_and_headroom():
     assert payload["rx_busy"] == 200
     assert payload["tx_busy"] == 300
     assert payload["lx_busy"] == 3500
-    assert payload["idle"] == 6000
+    assert payload["lp_idle"] == 6000
     assert payload["loops_per_sec"] == 1234
     assert payload["max_loop_latency_ms"] == 12
 
@@ -388,7 +388,7 @@ async def test_stats_type_system_decodes_wait_pcts_and_pkt_rate():
     payload = mock_dispatcher.dispatched_events[0].payload
     assert payload["tx_wait_airtime"] == 0
     assert payload["tx_wait_cad"] == 0
-    assert payload["rx_wait"] == 0
+    assert payload["rx_wait_relay"] == 0
     assert payload["rx_per_min"] == 42
     assert payload["tx_per_min"] == 7
 
