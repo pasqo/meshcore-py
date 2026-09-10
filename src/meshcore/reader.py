@@ -558,17 +558,30 @@ class MessageReader:
                                 if len(data) >= 67:
                                     res['rx_per_min'], res['tx_per_min'] = \
                                         struct.unpack('<H H', data[63:67])
+                                # beebo fork: sys_busy -- loop()-housekeeping
+                                # time not attributed to rx/tx/lx (battery
+                                # ADC, slow-stat refresh, env sampling,
+                                # OTA/echo timeout checks, ...), same
+                                # reported (10s) tier as busy above.
+                                # Genuinely append-only. Reuses the wire slot
+                                # the now-disabled Phase 2 base/work split
+                                # used to occupy (offsets 67-79) -- a
+                                # breaking change to that slot, not
+                                # append-only relative to a pre-this-build
+                                # frame, but nothing currently on this branch
+                                # depends on the old base/work layout.
+                                if len(data) >= 69:
+                                    res['sys_busy'] = struct.unpack('<H', data[67:69])[0]
                                 # beebo fork: Phase 2 base/work split of busy
-                                # (0-10000 scale), same reported (10s) tier
-                                # as busy above. base is a fixed per-boot
-                                # calibrated constant x loop count in the
-                                # window; work = busy - base. Append-only,
-                                # absent on older/pre-Phase-2 builds.
-                                if len(data) >= 79:
-                                    (res['rx_base'], res['rx_work'],
-                                     res['tx_base'], res['tx_work'],
-                                     res['lx_base'], res['lx_work']) = \
-                                        struct.unpack('<H H H H H H', data[67:79])
+                                # -- disabled (doubtful diagnostic value for
+                                # the added complexity/fragility), no longer
+                                # sent by firmware. Kept commented rather
+                                # than removed in case this is revisited.
+                                # if len(data) >= 79:
+                                #     (res['rx_base'], res['rx_work'],
+                                #      res['tx_base'], res['tx_work'],
+                                #      res['lx_base'], res['lx_work']) = \
+                                #         struct.unpack('<H H H H H H', data[67:79])
                             await self.dispatcher.dispatch(Event(EventType.STATS_SYSTEM, res))
                         except struct.error as e:
                             logger.error(f"Error parsing stats system binary frame: {e}, data: {data.hex()}")
