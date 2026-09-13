@@ -77,8 +77,10 @@ class EventType(Enum):
 
     # beebo fork: RESP_CODE_STATS (24) sub-types the stock parser doesn't
     # know about (core/radio/packets are handled natively already).
+    # STATS_TRANSPORT (sub-type 4) was retired once RLOG's transport/boot/
+    # session trace moved into MonRing's MON_DEBUG kind -- no firmware build
+    # emits it anymore.
     STATS_SYSTEM = "stats_system"
-    STATS_TRANSPORT = "stats_transport"
     STATS_PROFILE = "stats_profile"
 
     # Command response types

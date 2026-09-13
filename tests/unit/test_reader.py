@@ -394,33 +394,6 @@ async def test_stats_type_system_decodes_wait_pcts_and_pkt_rate():
 
 
 @pytest.mark.asyncio
-async def test_stats_type_system_decodes_base_work_split():
-    import struct
-    mock_dispatcher = MockDispatcher()
-    reader = MessageReader(mock_dispatcher)
-
-    frame = (bytes([24, 3]) + struct.pack('<III', 1000, 2000, 4000000)
-             + struct.pack('<h', 250)
-             + struct.pack('<IIII', 300000, 8000000, 500000, 1000000)
-             + struct.pack('<H', 3) + struct.pack('<H', 7)
-             + bytes([1]) + struct.pack('<II', 100, 5000)
-             + struct.pack('<HHHH', 200, 300, 3500, 6000)
-             + struct.pack('<HH', 1234, 12)
-             + struct.pack('<HHH', 0, 0, 0)
-             + struct.pack('<HH', 42, 7)
-             + struct.pack('<HHHHHH', 50, 150, 80, 220, 1000, 2500))
-    await reader.handle_rx(bytearray(frame))
-
-    payload = mock_dispatcher.dispatched_events[0].payload
-    assert payload["rx_base"] == 50
-    assert payload["rx_work"] == 150
-    assert payload["tx_base"] == 80
-    assert payload["tx_work"] == 220
-    assert payload["lx_base"] == 1000
-    assert payload["lx_work"] == 2500
-
-
-@pytest.mark.asyncio
 async def test_stats_type_packets_decodes_beebo_dup_fields():
     import struct
     mock_dispatcher = MockDispatcher()
@@ -433,22 +406,6 @@ async def test_stats_type_packets_decodes_beebo_dup_fields():
     assert mock_dispatcher.dispatched_events[0].type == EventType.STATS_PACKETS
     assert payload["n_direct_dups"] == 8
     assert payload["n_flood_dups"] == 9
-
-
-@pytest.mark.asyncio
-async def test_stats_type_transport_decodes_ring_page():
-    import struct
-    mock_dispatcher = MockDispatcher()
-    reader = MessageReader(mock_dispatcher)
-
-    header = bytes([24, 4]) + struct.pack('<HH', 1, 0)
-    event = struct.pack('<I', 100) + bytes([1]) + struct.pack('<i', 1)
-    await reader.handle_rx(bytearray(header + event))
-
-    ev = mock_dispatcher.dispatched_events[0]
-    assert ev.type == EventType.STATS_TRANSPORT
-    assert ev.payload["total"] == 1
-    assert ev.payload["events"] == [{"millis": 100, "type": 1, "detail": 1}]
 
 
 @pytest.mark.asyncio

@@ -587,22 +587,16 @@ class MessageReader:
                             logger.error(f"Error parsing stats system binary frame: {e}, data: {data.hex()}")
                             await self.dispatcher.dispatch(Event(EventType.ERROR, {"reason": f"binary_parse_error: {e}"}))
 
-                elif stats_type in (4, 5):  # beebo fork: STATS_TYPE_TRANSPORT / STATS_TYPE_PROFILE
-                    # Both are paginated event rings: <B B H H> header
-                    # (code, stats_type, total, offset) then back-to-back
-                    # events, each a 4-byte millis timestamp + type-specific
-                    # fields (event_size includes the millis prefix).
-                    if stats_type == 4:
-                        event_name, event_size = EventType.STATS_TRANSPORT, 9
+                elif stats_type == 5:  # beebo fork: STATS_TYPE_PROFILE
+                    # A paginated event ring: <B B H H> header (code,
+                    # stats_type, total, offset) then back-to-back events,
+                    # each a 4-byte millis timestamp + type-specific fields
+                    # (event_size includes the millis prefix).
+                    event_name, event_size = EventType.STATS_PROFILE, 8
 
-                        def decode_fields(d, pos):
-                            return {'type': d[pos], 'detail': struct.unpack_from('<i', d, pos + 1)[0]}
-                    else:
-                        event_name, event_size = EventType.STATS_PROFILE, 8
-
-                        def decode_fields(d, pos):
-                            return {'id': d[pos] | (d[pos + 1] << 8),
-                                    'duration_us': d[pos + 2] | (d[pos + 3] << 8)}
+                    def decode_fields(d, pos):
+                        return {'id': d[pos] | (d[pos + 1] << 8),
+                                'duration_us': d[pos + 2] | (d[pos + 3] << 8)}
 
                     if len(data) < 6:
                         logger.error(f"Stats ring response too short: {len(data)} bytes, expected >= 6")
