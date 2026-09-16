@@ -335,6 +335,15 @@ class MessageReader:
             elif packet_type_value == PacketType.CURRENT_TIME.value:
                 time_value = int.from_bytes(dbuf.read(4), byteorder="little")
                 result = {"time": time_value}
+                # beebo: widened, backward-compatibly, with an optional
+                # trailing ms u16 (2 more bytes than the original 4B-only
+                # reply) -- present only when this request itself already
+                # carried ms (CMD_GET_DEVICE_TIME's len>=8 beebo path), so
+                # an old/third-party firmware's plain 4-byte reply is
+                # unaffected. len(data) is the whole frame incl. the 1-byte
+                # packet type already consumed above.
+                if len(data) - dbuf.tell() >= 2:
+                    result["ms"] = int.from_bytes(dbuf.read(2), byteorder="little")
                 await self.dispatcher.dispatch(Event(EventType.CURRENT_TIME, result))
 
             elif packet_type_value == PacketType.NO_MORE_MSGS.value:
