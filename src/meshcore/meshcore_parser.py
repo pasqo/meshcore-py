@@ -8,7 +8,12 @@ from Crypto.Hash import HMAC, SHA256
 
 logger = logging.getLogger("meshcore")
 
-PAYLOAD_TYPENAMES = ["REQ", "RESPONSE", "TEXT_MSG", "ACK", "ADVERT", "GRP_TXT", "GRP_DATA", "ANON_REQ", "PATH", "TRACE", "MULTIPART", "CONTROL"]
+PAYLOAD_TYPENAMES = [
+    "REQ", "RESPONSE", "TEXT_MSG", "ACK", "ADVERT", "GRP_TXT", "GRP_DATA",
+    "ANON_REQ", "PATH", "TRACE", "MULTIPART", "CONTROL",
+    "RESERVED_12", "RESERVED_13", "RESERVED_14",  # unused -- no PAYLOAD_TYPE_* defines these (fw/src/Packet.h)
+    "RAW_CUSTOM",  # 0x0F -- beebo's poke sub-protocol layers on this (see fw/src/Packet.h, beebo/src/beebo/poke.py)
+]
 ROUTE_TYPENAMES = ["TC_FLOOD", "FLOOD", "DIRECT", "TC_DIRECT"]
 CONTACT_TYPENAMES = ["NONE","CLI","REP","ROOM","SENS"]
 
