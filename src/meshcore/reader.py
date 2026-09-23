@@ -562,11 +562,6 @@ class MessageReader:
                                 if len(data) >= 63:
                                     (res['tx_wait_airtime'], res['tx_wait_cad'],
                                      res['rx_wait_relay']) = struct.unpack('<H H H', data[57:63])
-                                # beebo fork: Phase 4 live packets/minute,
-                                # reported (10s) tier.
-                                if len(data) >= 67:
-                                    res['rx_per_min'], res['tx_per_min'] = \
-                                        struct.unpack('<H H', data[63:67])
                                 # beebo fork: sys_busy -- loop()-housekeeping
                                 # time not attributed to rx/tx/lx (battery
                                 # ADC, slow-stat refresh, env sampling,
@@ -574,23 +569,23 @@ class MessageReader:
                                 # reported (10s) tier as busy above.
                                 # Genuinely append-only. Reuses the wire slot
                                 # the now-disabled Phase 2 base/work split
-                                # used to occupy (offsets 67-79) -- a
+                                # used to occupy (offsets 63-75) -- a
                                 # breaking change to that slot, not
                                 # append-only relative to a pre-this-build
                                 # frame, but nothing currently on this branch
                                 # depends on the old base/work layout.
-                                if len(data) >= 69:
-                                    res['sys_busy'] = struct.unpack('<H', data[67:69])[0]
+                                if len(data) >= 65:
+                                    res['sys_busy'] = struct.unpack('<H', data[63:65])[0]
                                 # beebo fork: Phase 2 base/work split of busy
                                 # -- disabled (doubtful diagnostic value for
                                 # the added complexity/fragility), no longer
                                 # sent by firmware. Kept commented rather
                                 # than removed in case this is revisited.
-                                # if len(data) >= 79:
+                                # if len(data) >= 75:
                                 #     (res['rx_base'], res['rx_work'],
                                 #      res['tx_base'], res['tx_work'],
                                 #      res['lx_base'], res['lx_work']) = \
-                                #         struct.unpack('<H H H H H H', data[67:79])
+                                #         struct.unpack('<H H H H H H', data[63:75])
                             await self.dispatcher.dispatch(Event(EventType.STATS_SYSTEM, res))
                         except struct.error as e:
                             logger.error(f"Error parsing stats system binary frame: {e}, data: {data.hex()}")
@@ -1154,6 +1149,13 @@ class MessageReader:
                         await self.dispatcher.dispatch(Event(EventType.ECHO_STATS, {
                             "echo_success_count": heard, "echo_timeout_count": not_heard,
                             "echo_overflow_count": overflow, "self_tx_direct_count": self_tx_direct,
+                        }))
+                    elif sub_id == 26 and len(data) >= 3:  # BEEBO_RESP_COUNTER_RATES
+                        n = data[2]
+                        if n > (len(data) - 3) // 2:
+                            n = (len(data) - 3) // 2
+                        await self.dispatcher.dispatch(Event(EventType.COUNTER_RATES, {
+                            "per_min": list(struct.unpack(f"<{n}H", data[3:3 + 2 * n])),
                         }))
                     elif sub_id == 11:  # BEEBO_RESP_REGION_HOME
                         name = bytes(data[2:]).decode("utf-8", "ignore")

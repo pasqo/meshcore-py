@@ -66,6 +66,7 @@ class EventType(Enum):
     FULL_VERSION = "full_version_reply"
     ACK_STATS = "ack_stats_reply"
     ECHO_STATS = "echo_stats_reply"
+    COUNTER_RATES = "counter_rates_reply"
     REGION_HOME = "region_home_reply"
     REGION_LIST = "region_list_reply"
     REGION_TREE = "region_tree_reply"

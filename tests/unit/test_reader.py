@@ -369,7 +369,7 @@ async def test_stats_type_system_decodes_busy_idle_and_headroom():
 
 
 @pytest.mark.asyncio
-async def test_stats_type_system_decodes_wait_pcts_and_pkt_rate():
+async def test_stats_type_system_decodes_wait_pcts_and_sys_busy():
     import struct
     mock_dispatcher = MockDispatcher()
     reader = MessageReader(mock_dispatcher)
@@ -382,15 +382,37 @@ async def test_stats_type_system_decodes_wait_pcts_and_pkt_rate():
              + struct.pack('<HHHH', 200, 300, 3500, 6000)
              + struct.pack('<HH', 1234, 12)
              + struct.pack('<HHH', 0, 0, 0)
-             + struct.pack('<HH', 42, 7))
+             + struct.pack('<H', 150))
     await reader.handle_rx(bytearray(frame))
 
     payload = mock_dispatcher.dispatched_events[0].payload
     assert payload["tx_wait_airtime"] == 0
     assert payload["tx_wait_cad"] == 0
     assert payload["rx_wait_relay"] == 0
-    assert payload["rx_per_min"] == 42
-    assert payload["tx_per_min"] == 7
+    assert payload["sys_busy"] == 150
+    assert "rx_per_min" not in payload
+
+
+@pytest.mark.asyncio
+async def test_beebo_counter_rates_reply_decodes_per_min_list():
+    import struct
+    mock_dispatcher = MockDispatcher()
+    reader = MessageReader(mock_dispatcher)
+    frame = bytes([223, 26, 3]) + struct.pack('<3H', 6, 0, 65535)
+    await reader.handle_rx(bytearray(frame))
+    ev = mock_dispatcher.dispatched_events[0]
+    assert ev.type == EventType.COUNTER_RATES
+    assert ev.payload == {"per_min": [6, 0, 65535]}
+
+
+@pytest.mark.asyncio
+async def test_beebo_counter_rates_reply_truncated_uses_available_entries():
+    import struct
+    mock_dispatcher = MockDispatcher()
+    reader = MessageReader(mock_dispatcher)
+    frame = bytes([223, 26, 5]) + struct.pack('<2H', 1, 2)   # claims 5, carries 2
+    await reader.handle_rx(bytearray(frame))
+    assert mock_dispatcher.dispatched_events[0].payload == {"per_min": [1, 2]}
 
 
 @pytest.mark.asyncio
