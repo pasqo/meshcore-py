@@ -3,7 +3,7 @@ import logging
 import random
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
 
-from meshcore.packets import BinaryReqType, AnonReqType
+from meshcore.packets import BinaryReqType, AnonReqType, redact_key_frame
 
 from ..events import Event, EventDispatcher, EventType
 from ..reader import MessageReader
@@ -214,7 +214,7 @@ class CommandHandlerBase:
                 if self._sender_func:
                     logger.debug(
                         f"Sending raw data: "
-                        f"{data.hex() if isinstance(data, bytes) else data}"
+                        f"{redact_key_frame(data) or (data.hex() if isinstance(data, bytes) else data)}"
                     )
                     await self._sender_func(data)
 
@@ -258,7 +258,7 @@ class CommandHandlerBase:
             if self._sender_func:
                 logger.debug(
                     f"Sending raw data: "
-                    f"{data.hex() if isinstance(data, bytes) else data}"
+                    f"{redact_key_frame(data) or (data.hex() if isinstance(data, bytes) else data)}"
                 )
                 await self._sender_func(data)
             return Event(EventType.OK, {})

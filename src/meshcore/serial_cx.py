@@ -6,6 +6,8 @@ import asyncio
 import logging
 import serial_asyncio_fast as serial_asyncio
 
+from .packets import redact_key_frame
+
 # Get logger
 logger = logging.getLogger("meshcore")
 
@@ -192,7 +194,7 @@ class SerialConnection:
             return
         size = len(data)
         pkt = b"\x3c" + size.to_bytes(2, byteorder="little") + data
-        logger.debug(f"sending pkt : {pkt}")
+        logger.debug(f"sending pkt : {redact_key_frame(pkt, 3) or pkt}")
         try:
             self.transport.write(pkt)
         except OSError as exc:
@@ -262,7 +264,7 @@ class AttachedSerialConnection:
     async def send(self, data):
         size = len(data)
         pkt = b"\x3c" + size.to_bytes(2, byteorder="little") + data
-        logger.debug(f"sending pkt (attached): {pkt}")
+        logger.debug(f"sending pkt (attached): {redact_key_frame(pkt, 3) or pkt}")
         self.owner.write_raw(pkt)
 
     async def disconnect(self):

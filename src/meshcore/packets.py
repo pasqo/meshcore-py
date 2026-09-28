@@ -132,3 +132,16 @@ class PacketType(Enum):
     # every beebo action framed as a sub-id byte after this code. See
     # beebo-meshcore-dev's protocol.yaml for the sub-id table.
     RESP_CODE_BEEBO = 223
+
+
+# Frames that carry the node's private key (export reply, import command):
+# never written to the log verbatim.
+_KEY_FRAME_CODES = {PacketType.PRIVATE_KEY.value, CommandType.IMPORT_PRIVATE_KEY.value}
+
+
+def redact_key_frame(data, start: int = 0):
+    """A length-only stand-in for the log when `data` (a frame, or a transport
+    packet whose code byte is at `start`) carries the private key, else None."""
+    if isinstance(data, (bytes, bytearray)) and len(data) > start and data[start] in _KEY_FRAME_CODES:
+        return f"<{len(data)} bytes, private key not logged>"
+    return None

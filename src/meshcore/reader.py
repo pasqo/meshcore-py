@@ -7,7 +7,7 @@ import traceback
 from typing import Any, Dict
 from .events import Event, EventType, EventDispatcher, ErrorMessages
 from .meshcore_parser import MeshcorePacketParser
-from .packets import BinaryReqType, PacketType, ControlType
+from .packets import BinaryReqType, PacketType, ControlType, redact_key_frame
 from .parsing import lpp_parse, lpp_parse_mma, parse_acl, parse_status
 from cayennelpp import LppFrame, LppData
 from meshcore.lpp_json_encoder import lpp_json_encoder
@@ -71,7 +71,7 @@ class MessageReader:
             logger.warning(f"Received empty packet: {e}")
             return
         try:
-            logger.debug(f"Received data: {data.hex()}")
+            logger.debug(f"Received data: {redact_key_frame(data) or data.hex()}")
 
             # Handle command responses
             if packet_type_value == PacketType.OK.value:
@@ -1015,7 +1015,7 @@ class MessageReader:
                 )
 
             elif packet_type_value == PacketType.PRIVATE_KEY.value:
-                logger.debug(f"Received private key response: {data.hex()}")
+                logger.debug("Received private key response")
                 if len(data) >= 65:  # 1 byte response code + 64 bytes private key
                     private_key = dbuf.read(64)  # Extract 64-byte private key
                     res = {"private_key": private_key}

@@ -5,6 +5,8 @@ mccli.py : CLI interface to MeschCore BLE companion app
 import asyncio
 import logging
 
+from .packets import redact_key_frame
+
 # Get logger
 logger = logging.getLogger("meshcore")
 
@@ -177,7 +179,7 @@ class TCPConnection:
 
         size = len(data)
         pkt = b"\x3c" + size.to_bytes(2, byteorder="little") + data
-        logger.debug(f"sending pkt : {pkt}")
+        logger.debug(f"sending pkt : {redact_key_frame(pkt, 3) or pkt}")
         try:
             self.transport.write(pkt)
         except (OSError, ConnectionResetError) as exc:

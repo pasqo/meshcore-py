@@ -232,7 +232,9 @@ class EventDispatcher:
         while self.running:
             event = await self.queue.get()
             logger.debug(
-                f"Dispatching event: {event.type}, {event.payload}, {event.attributes}"
+                f"Dispatching event: {event.type}, "
+                f"{'<private key not logged>' if event.type == EventType.PRIVATE_KEY else event.payload}, "
+                f"{event.attributes}"
             )
 
             for subscription in self.subscriptions.copy():
