@@ -52,6 +52,7 @@ class BLEConnection:
         self.rx_char = None
         self._disconnect_callback = None
         self._background_tasks: set[asyncio.Task] = set()
+        self._connecting = False
 
     def _spawn_background(self, coro) -> asyncio.Task:
         """Create a tracked background task (prevents GC of fire-and-forget tasks)."""
@@ -61,6 +62,16 @@ class BLEConnection:
         return task
 
     async def connect(self):
+        """Connects to the device (see _connect()); disconnect callbacks that
+        arrive while it runs belong to bleak's own retries, not to a lost
+        connection."""
+        self._connecting = True
+        try:
+            return await self._connect()
+        finally:
+            self._connecting = False
+
+    async def _connect(self):
         """
         Connects to the device.
 
@@ -156,6 +167,13 @@ class BLEConnection:
 
     def handle_disconnect(self, client: BleakClient):
         """Callback to handle disconnection"""
+        if self._connecting:
+            # bleak retries inside client.connect() when BlueZ aborts a try
+            # (le-connection-abort-by-local); the aborted try's callback
+            # lands while the retry is still running. Clearing self.client
+            # here left the successful retry without a client to use.
+            logger.debug(f"BLE disconnect during connect ignored: {client.address}")
+            return
         logger.debug(
             f"BLE device disconnected: {client.address} (is_connected: {client.is_connected})"
         )
