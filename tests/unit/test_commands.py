@@ -146,6 +146,38 @@ async def test_send_cmd(command_handler, mock_connection):
     assert b"test_cmd" in mock_connection.send.call_args[0][0]
 
 
+async def test_send_cli_cmd(command_handler, mock_connection):
+    await command_handler.send_cli_cmd("0123456789abcdef", "get name", timestamp=1)
+
+    assert mock_connection.send.call_args[0][0] == (
+        b"\x02\x03\x00" + (1).to_bytes(4, "little")
+        + bytes.fromhex("0123456789ab") + b"get name")
+
+
+def _contact(flags):
+    return {
+        "public_key": "01" * 32, "type": 1, "flags": flags, "out_path": "",
+        "out_path_len": 0, "out_path_hash_mode": 0, "adv_name": "n",
+        "last_advert": 0, "adv_lat": 0.0, "adv_lon": 0.0,
+    }
+
+
+async def test_set_remote_cli_permission_sets_bit_keeps_other_flags(command_handler, mock_connection):
+    contact = _contact(0x05)
+    await command_handler.set_remote_cli_permission(contact, True)
+
+    assert contact["flags"] == 0x15
+    sent = mock_connection.send.call_args[0][0]
+    assert sent[0] == 0x09 and sent[34] == 0x15  # CMD_ADD_UPDATE_CONTACT, flags byte
+
+
+async def test_set_remote_cli_permission_clears_bit_keeps_other_flags(command_handler, mock_connection):
+    contact = _contact(0x15)
+    await command_handler.set_remote_cli_permission(contact, False)
+
+    assert contact["flags"] == 0x05
+
+
 # Device settings tests
 async def test_set_name(command_handler, mock_connection):
     await command_handler.set_name("Test Device")

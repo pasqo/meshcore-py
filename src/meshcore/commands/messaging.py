@@ -79,6 +79,27 @@ class MessagingCommands(CommandHandlerBase):
         )
         return await self.send(data, [EventType.MSG_SENT, EventType.ERROR])
 
+    async def send_cli_cmd(
+        self, dst: DestinationType, cmd: str, timestamp: Optional[int] = None
+    ) -> Event:
+        """Send a companion CLI command (text type 3) to a contact whose
+        remote CLI permission is set (see set_remote_cli_permission)."""
+        dst_bytes = _validate_destination(dst)
+        logger.debug(f"Sending CLI command to {dst_bytes.hex()}: {cmd}")
+
+        if timestamp is None:
+            import time
+
+            timestamp = int(time.time())
+
+        data = (
+            b"\x02\x03\x00"
+            + timestamp.to_bytes(4, "little")
+            + dst_bytes
+            + cmd.encode("utf-8")
+        )
+        return await self.send(data, [EventType.MSG_SENT, EventType.ERROR])
+
     async def send_msg(
         self, dst: DestinationType, msg: str, timestamp: Optional[int] = None,
         attempt=0

@@ -7,6 +7,8 @@ from .base import CommandHandlerBase, DestinationType, _validate_destination
 
 logger = logging.getLogger("meshcore")
 
+REMOTE_CLI_FLAG = 0x10  # contact flags bit: may run companion CLI commands remotely
+
 
 class ContactCommands(CommandHandlerBase):
     async def get_contacts_async(self, lastmod=0) :
@@ -181,6 +183,12 @@ class ContactCommands(CommandHandlerBase):
         return await self.update_contact(contact, path, path_hash_mode=path_hash_mode)
 
     async def change_contact_flags(self, contact, flags) -> Event:
+        return await self.update_contact(contact, flags=flags)
+
+    async def set_remote_cli_permission(self, contact, allowed: bool) -> Event:
+        """Set or clear the contact's remote CLI bit (0x10 in the flags byte),
+        keeping its other flags."""
+        flags = contact["flags"] | REMOTE_CLI_FLAG if allowed else contact["flags"] & ~REMOTE_CLI_FLAG
         return await self.update_contact(contact, flags=flags)
 
     async def set_autoadd_config(self, flag : int) -> Event:
