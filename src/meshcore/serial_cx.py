@@ -31,6 +31,7 @@ class SerialConnection:
         self._disconnect_callback = None
         self.cx_dly = cx_dly
         self._connected_event = asyncio.Event()
+        self._closed_event = asyncio.Event()
         self._background_tasks: set[asyncio.Task] = set()
 
         self.frame_expected_size = 0
@@ -88,6 +89,7 @@ class SerialConnection:
         def connection_lost(self, exc):
             logger.debug('Serial port closed')
             self.cx._connected_event.clear()
+            self.cx._closed_event.set()
 
             if self.cx._disconnect_callback:
                 self.cx._spawn_background(self.cx._disconnect_callback("serial_disconnect"))
@@ -205,9 +207,19 @@ class SerialConnection:
     async def disconnect(self):
         """Close the serial connection."""
         if self.transport:
+            self._closed_event.clear()
             self.transport.close()
             self.transport = None
             self._connected_event.clear()
+            # serial_asyncio_fast closes the port in a background task (a
+            # flush and a close, each through the executor) and only then
+            # calls connection_lost(). Wait for it: a caller that closes the
+            # event loop right after would otherwise destroy that task and
+            # leave the port and its abort pipes open.
+            try:
+                await asyncio.wait_for(self._closed_event.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Serial port did not finish closing within 5 s")
             logger.debug("Serial Connection closed")
 
     def set_disconnect_callback(self, callback):

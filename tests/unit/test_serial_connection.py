@@ -199,3 +199,59 @@ async def test_attached_notify_disconnected_no_callback_does_not_raise():
     conn = AttachedSerialConnection(owner, "/dev/ttyACM0")
 
     conn.notify_disconnected("debug_link_lost")  # must not raise
+
+
+class _ClosingTransport:
+    """close() returns at once; the port reports closed later, the way
+    serial_asyncio_fast's background close does."""
+
+    def __init__(self, conn, close_after_s):
+        self.conn = conn
+        self.close_after_s = close_after_s
+        self.close_called = False
+
+    def close(self):
+        self.close_called = True
+        if self.close_after_s is not None:
+            asyncio.get_running_loop().call_later(
+                self.close_after_s, self.conn._closed_event.set)
+
+
+@pytest.mark.asyncio
+async def test_disconnect_waits_until_the_port_reports_closed():
+    conn = SerialConnection("/dev/null", 115200)
+    conn.transport = _ClosingTransport(conn, close_after_s=0.05)
+    transport = conn.transport
+
+    await conn.disconnect()
+
+    assert transport.close_called
+    assert conn._closed_event.is_set()
+    assert conn.transport is None
+
+
+@pytest.mark.asyncio
+async def test_disconnect_gives_up_if_the_port_never_reports_closed(monkeypatch):
+    real_wait_for = asyncio.wait_for
+
+    async def _short_wait_for(aw, timeout):
+        return await real_wait_for(aw, timeout=0.05)
+
+    monkeypatch.setattr("meshcore.serial_cx.asyncio.wait_for", _short_wait_for)
+    conn = SerialConnection("/dev/null", 115200)
+    conn.transport = _ClosingTransport(conn, close_after_s=None)
+
+    await conn.disconnect()   # must return, not hang
+
+    assert conn.transport is None
+    assert not conn._closed_event.is_set()
+
+
+@pytest.mark.asyncio
+async def test_connection_lost_marks_the_port_closed():
+    conn = SerialConnection("/dev/null", 115200)
+    protocol = SerialConnection.MCSerialClientProtocol(conn)
+
+    protocol.connection_lost(None)
+
+    assert conn._closed_event.is_set()
