@@ -10,9 +10,26 @@ from meshcore.ble_cx import (
 )
 
 
+class _NoAgent:
+    """Stands in for the BlueZ agent so unit tests never touch the system bus."""
+
+    registered = False
+    answered = 0
+
+    def __init__(self, pin):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
 class TestBLEPinPairing(unittest.TestCase):
     """Test BLE PIN pairing functionality"""
 
+    @patch("meshcore.ble_cx.PinAgent", _NoAgent)
     @patch("meshcore.ble_cx.BleakClient")
     def test_ble_connection_with_pin_successful_pairing(self, mock_bleak_client):
         """Test BLE connection with PIN when pairing succeeds"""
@@ -35,6 +52,7 @@ class TestBLEPinPairing(unittest.TestCase):
         )
         self.assertEqual(result, address)
 
+    @patch("meshcore.ble_cx.PinAgent", _NoAgent)
     @patch("meshcore.ble_cx.BleakClient")
     def test_ble_connection_with_pin_failed_pairing(self, mock_bleak_client):
         """Test BLE connection with PIN when pairing fails — re-raises (F17)."""
@@ -118,3 +136,26 @@ class TestBLEPinPairing(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class _RegisteredAgent(_NoAgent):
+    registered = True
+    paired = []
+
+    async def pair(self, device_path):
+        _RegisteredAgent.paired.append(device_path)
+
+
+class TestBLEPinAgentPairing(TestBLEPinPairing):
+    @patch("meshcore.ble_cx.PinAgent", _RegisteredAgent)
+    @patch("meshcore.ble_cx.BleakClient")
+    def test_pairing_goes_through_the_agents_own_connection(self, mock_bleak_client):
+        _RegisteredAgent.paired.clear()
+        client = self._get_mock_bleak_client()
+        client._backend._device_path = "/org/bluez/hci0/dev_00_11_22_33_44_55"
+        mock_bleak_client.return_value = client
+        ble_conn = BLEConnection(address="00:11:22:33:44:55", pin="123456")
+
+        asyncio.run(ble_conn.connect())
+
+        self.assertEqual(_RegisteredAgent.paired, ["/org/bluez/hci0/dev_00_11_22_33_44_55"])
+        client.pair.assert_not_called()

@@ -5,6 +5,8 @@ mccli.py : CLI interface to MeschCore BLE companion app
 import asyncio
 import logging
 
+from .bluez_agent import PinAgent
+
 
 # Make bleak optional - only fail if BLE operations are attempted
 try:
@@ -132,8 +134,12 @@ class BLEConnection:
             if self.pin is not None:
                 logger.debug(f"Attempting BLE pairing with PIN")
                 try:
-                    await self.client.pair()
-                    logger.info("BLE pairing successful")
+                    async with PinAgent(self.pin) as agent:
+                        if agent.registered:
+                            await agent.pair(self._device_path())
+                        else:
+                            await self.client.pair()
+                    logger.info(f"BLE pairing successful (PIN answered {agent.answered}x)")
                 except Exception as e:
                     logger.error(f"BLE pairing failed: {e}")
                     # A failed pairing leaves the transport in a half-usable
@@ -164,6 +170,13 @@ class BLEConnection:
 
         logger.info("BLE Connection started")
         return self.address
+
+    def _device_path(self) -> str:
+        """BlueZ object path of the connected device."""
+        path = getattr(getattr(self.client, "_backend", None), "_device_path", None)
+        if isinstance(path, str):
+            return path
+        return "/org/bluez/hci0/dev_" + str(self.client.address).upper().replace(":", "_")
 
     def handle_disconnect(self, client: BleakClient):
         """Callback to handle disconnection"""
