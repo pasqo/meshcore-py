@@ -212,7 +212,13 @@ class MeshCore:
 
     async def connect(self):
         await self.dispatcher.start()
-        result = await self.connection_manager.connect()
+        try:
+            result = await self.connection_manager.connect()
+        except BaseException:
+            # A cancellation (or error) while the transport is connecting
+            # would otherwise leave the dispatcher task running forever.
+            await self.dispatcher.stop()
+            raise
         if result is None:
             await self.dispatcher.stop()
             raise ConnectionError("Failed to connect to device")

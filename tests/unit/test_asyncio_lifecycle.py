@@ -233,3 +233,30 @@ class TestGetRunningLoop(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConnectCancelStopsDispatcher(unittest.TestCase):
+    """A cancelled transport connect must not leave the dispatcher task running."""
+
+    def test_cancel_during_transport_connect_stops_dispatcher(self):
+        from meshcore.meshcore import MeshCore
+
+        async def _run():
+            cx = MagicMock()
+
+            async def _hang():
+                await asyncio.sleep(60)
+
+            cx.connect = _hang
+            mc = MeshCore(cx)
+            task = asyncio.ensure_future(mc.connect())
+            await asyncio.sleep(0.01)
+            assert mc.dispatcher._task is not None
+            dispatcher_task = mc.dispatcher._task
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            assert dispatcher_task.done()
+            assert not mc.dispatcher.running
+
+        asyncio.run(_run())
